@@ -31,6 +31,38 @@ jobs:
           rm -f source/.git
           rm -rf source/db source/worker source/examples source/drizzle source/build
           rm -f source/drizzle.config.ts source/vite.config.ts
+          python3 - <<'PY'
+          from pathlib import Path
+
+          header = Path("source/app/components/Header.tsx")
+          text = header.read_text(encoding="utf-8")
+          text = text.replace('<Link href="/#teachers">Преподаватели</Link>', '<a href="/bit-music-studio/#teachers">Преподаватели</a>')
+          text = text.replace('<Link href="/#process">Первое занятие</Link>', '<a href="/bit-music-studio/#process">Первое занятие</a>')
+          text = text.replace('<Link href="/#diagnostic">Бесплатная диагностика</Link>', '<a href="/bit-music-studio/#diagnostic">Бесплатная диагностика</a>')
+          text = text.replace(
+              '<Link className="button button--green button--compact" href="/#diagnostic">\n'
+              '            Записаться\n'
+              '          </Link>',
+              '<a className="button button--green button--compact" href="/bit-music-studio/#diagnostic">\n'
+              '            Записаться\n'
+              '          </a>',
+          )
+          header.write_text(text, encoding="utf-8")
+
+          profile = Path("source/app/teachers/[slug]/page.tsx")
+          text = profile.read_text(encoding="utf-8")
+          text = text.replace(
+              '<Link className="back-link" href="/#teachers">\n'
+              '                ← Все преподаватели\n'
+              '              </Link>',
+              '<a className="back-link" href="/bit-music-studio/#teachers">\n'
+              '                ← Все преподаватели\n'
+              '              </a>',
+          )
+          text = text.replace('<Link href="/#teachers">Все преподаватели</Link>', '<a href="/bit-music-studio/#teachers">Все преподаватели</a>')
+          text = text.replace('<Link href="/#process">Первое бесплатное занятие</Link>', '<a href="/bit-music-studio/#process">Первое бесплатное занятие</a>')
+          profile.write_text(text, encoding="utf-8")
+          PY
 
       - uses: actions/setup-node@v4
         with:
@@ -45,7 +77,6 @@ jobs:
         run: |
           npm ci
           npx next build --webpack
-          find out -type f \( -name '*.html' -o -name '*.txt' -o -name '*.js' \) -exec sed -i 's|"/#|"/bit-music-studio/#|g' {} +
 
       - uses: actions/configure-pages@v5
 
