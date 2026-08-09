@@ -31,7 +31,6 @@ jobs:
           rm -f source/.git
           rm -rf source/db source/worker source/examples source/drizzle source/build
           rm -f source/drizzle.config.ts source/vite.config.ts
-          find source/app -name '*.tsx' -exec sed -i 's|href="/#|href="/bit-music-studio/#|g' {} +
 
       - uses: actions/setup-node@v4
         with:
@@ -46,6 +45,7 @@ jobs:
         run: |
           npm ci
           npx next build --webpack
+          find out -type f \( -name '*.html' -o -name '*.txt' -o -name '*.js' \) -exec sed -i 's|"/#|"/bit-music-studio/#|g' {} +
 
       - uses: actions/configure-pages@v5
 
