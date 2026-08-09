@@ -29,6 +29,8 @@ jobs:
           mkdir source
           unzip -q source.zip -d source
           rm -f source/.git
+          rm -rf source/db source/worker source/examples source/drizzle
+          rm -f source/drizzle.config.ts
 
       - uses: actions/setup-node@v4
         with:
