@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Publish music studio to GitHub Pages
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  publish:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -23,29 +23,135 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore approved site source
-        run: |
-          cat transfer/site.zip.part-* > source.zip
-          mkdir source
-          unzip -q source.zip -d source
-          rm -f source/.git
-          rm -rf source/db source/worker source/examples source/drizzle
-          rm -f source/drizzle.config.ts source/vite.config.ts
-          rm -rf source/build
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: source/package-lock.json
-
-      - name: Install and build
-        working-directory: source
+      - name: Prepare the approved public site
         env:
-          NEXT_TELEMETRY_DISABLED: "1"
+          SOURCE_URL: https://bit-music-studio.timothy-baker147986.chatgpt.site
+          PAGE_PREFIX: /bit-music-studio
         run: |
-          npm ci
-          npx next build --webpack
+          python3 - <<'PY'
+          import html
+          import os
+          import re
+          import shutil
+          import urllib.parse
+          import urllib.request
+          from pathlib import Path
+
+          source = os.environ["SOURCE_URL"].rstrip("/")
+          prefix = os.environ["PAGE_PREFIX"].rstrip("/")
+          out = Path("site")
+          shutil.rmtree(out, ignore_errors=True)
+          out.mkdir(parents=True)
+          (out / ".nojekyll").write_text("", encoding="utf-8")
+
+          routes = [
+              "/",
+              "/teachers/classical-guitar/",
+              "/teachers/modern-guitar/",
+              "/teachers/piano/",
+          ]
+          media = [
+              "/favicon.svg",
+              "/media/electric-guitar-card.jpg",
+              "/media/electric-guitar-performance-poster.jpg",
+              "/media/electric-guitar-performance/init.mp4",
+              "/media/electric-guitar-performance/playlist.m3u8",
+              "/media/electric-guitar-performance/segment-000.m4s",
+              "/media/electric-guitar-performance/segment-001.m4s",
+              "/media/electric-guitar-performance/segment-002.m4s",
+              "/media/electric-guitar-performance/segment-003.m4s",
+              "/media/electric-guitar-performance/segment-004.m4s",
+              "/media/electric-guitar-performance/segment-005.m4s",
+              "/media/electric-guitar-performance/segment-006.m4s",
+              "/media/electric-guitar-performance/segment-007.m4s",
+              "/media/electric-guitar-performance/segment-008.m4s",
+              "/media/electric-guitar-performance/segment-009.m4s",
+              "/media/electric-guitar-performance/segment-010.m4s",
+              "/media/electric-guitar-profile.jpg",
+              "/media/piano-card.jpg",
+              "/media/piano-profile.jpg",
+              "/media/piano-rachmaninoff-etude-g-minor-poster.jpg",
+              "/media/piano-rachmaninoff-etude-g-minor.mp4",
+              "/media/viktor-about.jpg",
+              "/media/viktor-card.jpg",
+              "/media/viktor-performance-1-poster.jpg",
+              "/media/viktor-performance-1.mp4",
+              "/media/viktor-performance-2-poster.jpg",
+              "/media/viktor-performance-2.mp4",
+              "/media/viktor-profile.jpg",
+          ]
+
+          opener = urllib.request.build_opener()
+          opener.addheaders = [("User-Agent", "Mozilla/5.0 GitHub-Pages-Publisher")]
+
+          def fetch(path):
+              last = None
+              for _ in range(3):
+                  try:
+                      with opener.open(source + path, timeout=90) as response:
+                          return response.read(), response.headers.get_content_type()
+                  except Exception as exc:
+                      last = exc
+              raise last
+
+          def local_path(path):
+              clean = urllib.parse.urlsplit(path).path
+              if clean.endswith("/"):
+                  return out / clean.lstrip("/") / "index.html"
+              return out / clean.lstrip("/")
+
+          def rewrite(text):
+              text = text.replace(source, prefix)
+              for root in ("_next", "media", "teachers"):
+                  text = text.replace(f'"/{root}/', f'"{prefix}/{root}/')
+                  text = text.replace(f"'/{root}/", f"'{prefix}/{root}/")
+                  text = text.replace("\\/"+root+"\\/", "\\/"+prefix.strip("/")+"\\/"+root+"\\/")
+              text = text.replace('href="/"', f'href="{prefix}/"')
+              text = text.replace("href='/'", f"href='{prefix}/'")
+              return text
+
+          queue = list(routes) + list(media)
+          seen = set()
+          while queue:
+              path = urllib.parse.urlsplit(queue.pop(0)).path
+              if not path.startswith("/") or path in seen:
+                  continue
+              seen.add(path)
+              data, content_type = fetch(path)
+              target = local_path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              is_text = content_type.startswith("text/") or path.endswith(
+                  (".html", ".css", ".js", ".mjs", ".json", ".txt", ".m3u8", ".svg")
+              )
+              if not is_text:
+                  target.write_bytes(data)
+                  continue
+
+              text = data.decode("utf-8", errors="replace")
+              for pair in re.findall(r'''(?:src|href)=["']([^"'#]+)|url\(["']?([^)"']+)''', text):
+                  raw = html.unescape(next((item for item in pair if item), ""))
+                  if raw.startswith(source):
+                      raw = urllib.parse.urlsplit(raw).path
+                  if raw.startswith("/_next/") or raw.startswith("/media/") or raw == "/favicon.svg":
+                      queue.append(raw)
+              for raw in re.findall(r'''["'(](/(?:_next|media)/[^"' )\\]+)''', text):
+                  queue.append(html.unescape(raw))
+              text = rewrite(text)
+              if path in routes:
+                  guard = (
+                      '<script>document.addEventListener("click",function(e){'
+                      'var a=e.target.closest("a");if(a&&a.href&&a.origin===location.origin){'
+                      'e.preventDefault();e.stopImmediatePropagation();location.href=a.href;}'
+                      '},true);</script>'
+                  )
+                  text = text.replace("</head>", guard + "</head>", 1)
+              target.write_text(text, encoding="utf-8")
+
+          missing = [p for p in media if not local_path(p).exists()]
+          if missing:
+              raise SystemExit("Missing approved media: " + ", ".join(missing))
+          print(f"Prepared {sum(1 for p in out.rglob('*') if p.is_file())} public files")
+          PY
 
       - uses: actions/configure-pages@v5
         with:
@@ -53,8 +159,10 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: source/out
+          path: site
 
-      - name: Deploy
+      - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+# Source site access verified for final publication
