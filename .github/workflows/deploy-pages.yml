@@ -30,7 +30,8 @@ jobs:
           unzip -q source.zip -d source
           rm -f source/.git
           rm -rf source/db source/worker source/examples source/drizzle
-          rm -f source/drizzle.config.ts
+          rm -f source/drizzle.config.ts source/vite.config.ts
+          rm -rf source/build
 
       - uses: actions/setup-node@v4
         with:
